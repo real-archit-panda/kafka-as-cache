@@ -1,0 +1,53 @@
+# OPTIONAL — only needed if you do NOT already have a local Kafka broker.
+# On this machine a Homebrew Kafka 4.1.1 is already running on localhost:9092
+# (started via `brew services`), so we use that instead and do NOT run this file.
+# If you ever want a throwaway broker in Docker, first free port 9092 or change
+# the host port mapping below, then `docker compose up -d`.
+#
+# Single-broker Kafka in KRaft mode (no ZooKeeper).
+#
+# KRaft = Kafka Raft. Since Kafka 3.3+, the broker manages its own cluster
+# metadata using an internal Raft quorum, so we no longer need a separate
+# ZooKeeper container like older tutorials show. One container = one node that
+# plays BOTH roles: "broker" (handles data) and "controller" (manages metadata).
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: kafka
+    ports:
+      # 9092 is what OUR Spring app (running on the host) connects to.
+      - "9092:9092"
+    environment:
+      # --- KRaft identity ---
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      # The controller quorum: "1@kafka:9093" = node 1 reachable at kafka:9093.
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+
+      # --- Listeners ---
+      # We define three named listeners:
+      #   PLAINTEXT (9092)  -> client traffic
+      #   CONTROLLER (9093) -> internal Raft metadata traffic
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      # ADVERTISED_LISTENERS is the address the broker hands back to clients so
+      # they know where to reconnect. localhost:9092 works because we published
+      # the port to the host above.
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092"
+
+      # --- Single-node replication settings ---
+      # With only one broker, everything must have replication factor 1,
+      # otherwise topic creation fails.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # A fixed cluster ID so the storage format is consistent across restarts.
+      CLUSTER_ID: "kafka-as-cache-cluster-1"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+volumes:
+  kafka-data:

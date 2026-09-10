@@ -1,0 +1,50 @@
+server:
+  # 8080 is already used on this machine (Airflow), so run on 8081.
+  port: 8081
+
+spring:
+  application:
+    name: kafka-as-cache
+  kafka:
+    # Our existing local broker (Homebrew Kafka 4.1.1, KRaft mode).
+    bootstrap-servers: localhost:9092
+
+    # Producer config for the KafkaTemplate used on the WRITE path.
+    # Keys and values are Strings (value is JSON-as-a-string). The value
+    # serializer must tolerate nulls so our tombstone deletes work — the
+    # standard StringSerializer serializes null to null, which is exactly the
+    # tombstone we want.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+
+    streams:
+      # application-id is THE most important Streams setting. It:
+      #  - names the internal consumer group (controls partition assignment)
+      #  - prefixes the internal "changelog" and state-store directories
+      # Two instances sharing an application-id form one logical app and split
+      # the partitions between them. Change it and you get a brand-new, empty
+      # view that re-reads the topic from the start.
+      application-id: kafka-as-cache-streams
+      properties:
+        # Default (de)serializers for keys and values flowing through Streams.
+        # We store everything as strings (the value is JSON-as-a-string).
+        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        default.value.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        # How often Streams commits progress + flushes the state store. Low value
+        # here makes the "eventual consistency" delay small so demos feel snappy.
+        commit.interval.ms: 200
+
+# Our own app-specific settings (not Spring's). Referenced via @Value.
+distributed-store:
+  # The compacted topic that acts as the durable source of truth.
+  topic-name: distributed-key-value-store
+  # The name of the local materialized state store we query for reads.
+  store-name: kv-store
+
+logging:
+  level:
+    # Uncomment to watch Streams internals (restore, rebalance, etc.)
+    # org.apache.kafka.streams: DEBUG
+    com.example.kafkacache: INFO

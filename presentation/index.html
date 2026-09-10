@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kafka as a Cache — Presentation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2430;
+    --ink: #e6edf3;
+    --muted: #9198a1;
+    --accent: #58a6ff;
+    --accent-2: #3fb950;
+    --accent-3: #f0883e;
+    --accent-4: #db61a2;
+    --border: #30363d;
+    --kafka: #ff9f1c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  /* ---- deck / slides ---- */
+  .deck { height: 100vh; width: 100vw; position: relative; }
+  .slide {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    padding: 4vh 6vw;
+    animation: fade .35s ease;
+  }
+  .slide.active { display: flex; }
+  .slide { overflow-y: auto; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: none; } }
+
+  h1 { font-size: clamp(2rem, 5vw, 4rem); line-height: 1.1; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(1.4rem, 3vw, 2.4rem); margin-bottom: 3vh; letter-spacing: -0.01em; }
+  .kicker { color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: .15em; font-size: .8rem; margin-bottom: 1.5vh; }
+  .subtitle { color: var(--muted); font-size: clamp(1rem, 2vw, 1.4rem); margin-top: 3vh; max-width: 60ch; line-height: 1.5; }
+  .accent { color: var(--kafka); }
+
+  /* ---- title slide ---- */
+  .title-slide { justify-content: center; align-items: flex-start; }
+  .title-badge {
+    display: inline-flex; align-items: center; gap: .6rem;
+    background: var(--panel); border: 1px solid var(--border);
+    padding: .5rem 1rem; border-radius: 999px; margin-bottom: 4vh;
+    font-size: .9rem; color: var(--muted);
+  }
+  .title-meta { margin-top: 6vh; display: flex; gap: 2.5rem; color: var(--muted); font-size: .95rem; flex-wrap: wrap; }
+  .title-meta b { color: var(--ink); display: block; font-size: 1.05rem; margin-bottom: .2rem; }
+
+  /* ---- caching cards grid ---- */
+  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2.2vh 2vw; flex: 1; align-content: start; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 2.4vh 1.6vw; display: flex; flex-direction: column; gap: 1.2vh;
+  }
+  .card h3 { font-size: clamp(1.05rem, 1.7vw, 1.4rem); display: flex; align-items: center; gap: .5rem; }
+  .card .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .card p { color: var(--muted); font-size: clamp(.82rem, 1.1vw, .98rem); line-height: 1.5; }
+  .card .diagram { background: var(--panel-2); border-radius: 10px; padding: 1.2vh; margin-top: auto; }
+  .card svg { display: block; width: 100%; height: auto; }
+  .tag { align-self: flex-start; font-size: .72rem; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: .15rem .5rem; }
+
+  /* ---- slide 3: redis overhead ---- */
+  .redis-wrap { display: grid; grid-template-columns: 2fr 1fr; gap: 2vw; flex: 1; align-items: stretch; }
+  .redis-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4vw; }
+  .ov-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 2.2vh 1.2vw; display: flex; flex-direction: column; gap: 1.2vh; }
+  .ov-ico { width: 46px; height: 46px; border-radius: 10px; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+  .ov-card h3 { font-size: clamp(.95rem, 1.4vw, 1.2rem); }
+  .ov-card ul { list-style: none; display: flex; flex-direction: column; gap: 1vh; }
+  .ov-card li { color: var(--muted); font-size: clamp(.78rem, 1vw, .92rem); line-height: 1.45; padding-left: 1.1em; position: relative; }
+  .ov-card li::before { content: "›"; position: absolute; left: 0; color: var(--accent); }
+  .ov-card li b { color: var(--ink); font-weight: 600; }
+  .redis-note { background: linear-gradient(160deg,#161b22,#1c2430); border: 1px solid var(--border); border-radius: 14px; padding: 2.2vh 1.4vw; display: flex; flex-direction: column; gap: 2vh; justify-content: center; }
+  .note-diagram { background: var(--bg); border-radius: 10px; padding: 1.5vh 1vw; }
+  .note-diagram svg { display: block; width: 100%; height: auto; }
+  .note-text { color: var(--muted); font-size: clamp(.85rem, 1.15vw, 1.05rem); line-height: 1.55; }
+  .note-text b { color: var(--ink); }
+  .footnote { margin-top: 2.2vh; color: var(--muted); font-size: clamp(.78rem, 1vw, .92rem); border-top: 1px solid var(--border); padding-top: 1.6vh; line-height: 1.5; }
+
+  /* ---- slide 4: kafka features ---- */
+  .lead { color: var(--muted); font-size: clamp(.9rem, 1.4vw, 1.15rem); line-height: 1.55; max-width: 92ch; margin-bottom: 2.6vh; }
+  .feat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.4vh 1.8vw; }
+  .feat { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.6vh 1.4vw; display: flex; flex-direction: column; gap: .8vh; }
+  .feat-h { display: flex; align-items: center; gap: .6rem; font-size: clamp(.98rem, 1.4vw, 1.2rem); font-weight: 600; letter-spacing: -0.01em; }
+  .fnum { flex: none; width: 28px; height: 28px; border-radius: 8px; background: var(--kafka); color: #1a1200; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; font-size: .95rem; }
+  .feat p { color: var(--muted); font-size: clamp(.82rem, 1.1vw, .97rem); line-height: 1.5; }
+  .feat b { color: var(--ink); font-weight: 600; }
+  code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: .05rem .35rem; font-size: .85em; color: var(--accent); }
+  .usecases { display: flex; flex-wrap: wrap; align-items: center; gap: .8vw; margin-top: 2vh; padding-top: 1.6vh; border-top: 1px solid var(--border); }
+  .uc-label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; margin-right: .5vw; }
+  .uc { background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: .5vh .9vw; font-size: clamp(.8rem, 1vw, .95rem); color: var(--ink); }
+  .compact-explainer { display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.6vw; align-items: center; margin-top: 1.8vh; background: var(--panel-2); border: 1px dashed var(--border); border-radius: 12px; padding: 1.8vh 1.4vw; }
+  .ce-text { color: var(--muted); font-size: clamp(.78rem, 1vw, .92rem); line-height: 1.5; }
+  .ce-text b { color: var(--ink); }
+  .ce-title { display: block; color: var(--kafka); font-weight: 700; font-size: clamp(.85rem, 1.1vw, 1rem); margin-bottom: .6vh; }
+  .ce-diagram svg { display: block; width: 100%; height: auto; }
+
+  /* ---- slide 5: architecture ---- */
+  .arch { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.2vh 1.5vw; margin-bottom: 2vh; }
+  .arch-svg { display: block; width: 100%; height: auto; max-height: 34vh; }
+  .arch-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6vw; }
+  .arch-card { border: 1px solid var(--border); border-radius: 12px; padding: 1.4vh 1.2vw; background: var(--panel); }
+  .arch-card h3 { font-size: clamp(.92rem, 1.25vw, 1.1rem); margin-bottom: .8vh; }
+  .arch-card p { color: var(--muted); font-size: clamp(.76rem, 1vw, .9rem); line-height: 1.45; }
+  .arch-card p b { color: var(--ink); }
+  .arch-card.write { border-left: 3px solid var(--accent); }
+  .arch-card.read  { border-left: 3px solid var(--accent-4); }
+  .arch-card.note  { border-left: 3px solid var(--accent-3); }
+  .speaker-note { margin-top: 1.6vh; padding-top: 1.2vh; border-top: 1px solid var(--border); color: var(--muted); font-size: clamp(.68rem, .82vw, .78rem); line-height: 1.5; }
+  .speaker-note b { color: #7d8590; font-weight: 600; }
+
+  /* ---- slide 6: crash scenarios ---- */
+  .lead2 { color: var(--muted); font-size: clamp(.86rem, 1.25vw, 1.05rem); line-height: 1.5; max-width: 95ch; margin-bottom: 1.6vh; }
+
+  /* animated hero */
+  .crash-hero { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1vh 1.2vw .6vh; margin-bottom: 2vh; }
+  .hero-svg { display: block; width: 100%; height: auto; max-height: 20vh; }
+  .hero-cap { text-align: center; color: var(--muted); font-size: clamp(.72rem, .95vw, .86rem); padding: .4vh 0 .2vh; }
+
+  /* the crash cycle runs on a shared ~6s timeline */
+  .app-node   { animation: appCrash 6s infinite ease-in-out; transform-origin: 105px 80px; }
+  .burst      { animation: burstPop 6s infinite ease-in-out; transform-origin: 105px 80px; opacity: 0; }
+  .topic-node { animation: topicPulse 6s infinite ease-in-out; transform-origin: 465px 80px; }
+  .app2-node  { animation: appReturn 6s infinite ease-in-out; opacity: 0; }
+  .rebuild-arrow { stroke-dasharray: 8 6; animation: flow 0.6s linear infinite, arrowShow 6s infinite ease-in-out; }
+
+  @keyframes appCrash {
+    0%, 8%   { transform: translateX(0) rotate(0); opacity: 1; }
+    12% { transform: translateX(-3px) rotate(-1deg); }
+    16% { transform: translateX(3px) rotate(1deg); }
+    20% { transform: translateX(-3px) rotate(-1deg); }
+    24% { transform: translateX(0) rotate(0); opacity: 1; }
+    30% { opacity: 0.15; }           /* app "dies" */
+    75% { opacity: 0.15; }
+    90%, 100% { opacity: 1; }        /* comes back for next loop */
+  }
+  @keyframes burstPop {
+    0%, 22% { opacity: 0; transform: scale(.4); }
+    26% { opacity: 1; transform: scale(1.15); }
+    34% { opacity: 1; transform: scale(1); }
+    40% { opacity: 0; transform: scale(1.3); }
+    100% { opacity: 0; }
+  }
+  @keyframes topicPulse {
+    0%, 100% { filter: none; }
+    45% { filter: drop-shadow(0 0 6px #ff9f1c88); }
+  }
+  @keyframes appReturn {
+    0%, 45% { opacity: 0; transform: translateX(-10px); }
+    65% { opacity: 1; transform: translateX(0); }
+    92% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @keyframes arrowShow {
+    0%, 45% { opacity: 0; }
+    55%, 88% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @keyframes flow { to { stroke-dashoffset: -14; } }
+
+  .crash-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4vh 1.6vw; }
+  .crash-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.5vh 1.2vw; display: flex; flex-direction: column; gap: .8vh; }
+  .crash-card.ok { background: linear-gradient(160deg,#12211a,#161b22); border-color: #2ea04355; }
+  .crash-h { display: flex; align-items: center; gap: .55rem; font-size: clamp(.9rem, 1.25vw, 1.08rem); font-weight: 600; }
+  .cico { flex: none; width: 32px; height: 32px; border-radius: 9px; border: 1px solid; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
+  /* subtle life on the icons */
+  .crash-card:nth-child(1) .cico { animation: shake 3s infinite; }
+  .crash-card:nth-child(3) .cico { animation: swap 3s infinite ease-in-out; }
+  @keyframes shake { 0%,88%,100%{transform:translateX(0)} 91%{transform:translateX(-2px)} 94%{transform:translateX(2px)} 97%{transform:translateX(-1px)} }
+  @keyframes swap  { 0%,100%{transform:rotate(0)} 50%{transform:rotate(180deg)} }
+  .crash-card p { font-size: clamp(.74rem, .98vw, .88rem); line-height: 1.4; color: var(--muted); }
+  .crash-card p b { font-weight: 600; color: var(--ink); }
+  .crash-card .what b { color: #e6a99a; }
+  .crash-card .rec b { color: #7ee2a8; }
+  .verified { margin-top: auto; font-size: clamp(.66rem, .82vw, .76rem); color: var(--accent-2); border-top: 1px dashed var(--border); padding-top: .7vh; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-node,.burst,.topic-node,.app2-node,.rebuild-arrow,.cico { animation: none !important; opacity: 1 !important; }
+  }
+
+  /* ---- individual scenario slides ---- */
+  .scenario-list { display: flex; flex-wrap: wrap; gap: .8vw; margin-top: 1.6vh; }
+  .scenario-list span { background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: .5vh .9vw; font-size: clamp(.78rem, 1vw, .92rem); }
+  .scn h2 { display: flex; align-items: center; gap: .6rem; }
+  .scn-ico { font-size: 1.6em; }
+  .scn-body { display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.5vw; align-items: center; flex: 1; }
+  .scn-anim { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 2vh 1.5vw; }
+  .scn-svg { display: block; width: 100%; height: auto; max-height: 48vh; }
+  .scn-text { display: flex; flex-direction: column; gap: 1.6vh; }
+  .scn-text p { font-size: clamp(.9rem, 1.35vw, 1.15rem); line-height: 1.55; color: var(--muted); }
+  .scn-text p b { color: var(--ink); font-weight: 600; }
+  .scn-text .what b { color: #e6a99a; }
+  .scn-text .rec b { color: #7ee2a8; }
+  .scn-text .verified { margin-top: 1vh; font-size: clamp(.78rem, 1vw, .9rem); color: var(--accent-2); border-top: 1px dashed var(--border); padding-top: 1.4vh; }
+
+  /* shared: topic pulses gently on every scenario */
+  .scn .topic-node { animation: topicPulse 4s infinite ease-in-out; transform-origin: center; }
+
+  /* S1: app crashes -> rebuild */
+  .s1-app { animation: s1app 5s infinite; transform-origin: 230px 165px; }
+  .s1-burst { opacity: 0; animation: s1burst 5s infinite; transform-origin: 230px 170px; }
+  .s1-arrow, .s1-arrow-lbl { opacity: 0; animation: s1arrow 5s infinite; }
+  @keyframes s1app { 0%,15%{opacity:1;transform:none} 20%{transform:translateX(-3px)} 24%{transform:translateX(3px)} 30%{opacity:.12;transform:none} 70%{opacity:.12} 85%,100%{opacity:1} }
+  @keyframes s1burst { 0%,26%{opacity:0;transform:scale(.4)} 32%{opacity:1;transform:scale(1.1)} 42%{opacity:0;transform:scale(1.3)} 100%{opacity:0} }
+  @keyframes s1arrow { 0%,45%{opacity:0} 60%,80%{opacity:1} 100%{opacity:0} }
+
+  /* S2: db drains then refills */
+  .s2-db { animation: s2db 5s infinite; transform-origin: center; }
+  .s2-wipe { opacity: 0; animation: s2wipe 5s infinite; }
+  .s2-arrow, .s2-arrow-lbl { opacity: 0; animation: s1arrow 5s infinite; }
+  @keyframes s2db { 0%,20%{opacity:1} 32%{opacity:.15} 68%{opacity:.15} 85%,100%{opacity:1} }
+  @keyframes s2wipe { 0%,24%{opacity:0} 34%,55%{opacity:1} 70%,100%{opacity:0} }
+
+  /* S3: pod B dies, work moves to C */
+  .s3-die { animation: s3die 5s infinite; transform-origin: 230px 110px; }
+  .s3-burst { opacity: 0; animation: s1burst 5s infinite; transform-origin: 230px 112px; }
+  .s3-move { opacity: 0; animation: s3move 5s infinite; }
+  .s3-cnew { opacity: 0; animation: s3cnew 5s infinite; }
+  @keyframes s3die { 0%,25%{opacity:1} 32%{opacity:.12} 100%{opacity:.12} }
+  @keyframes s3move { 0%,40%{opacity:0} 55%,90%{opacity:1} 100%{opacity:1} }
+  @keyframes s3cnew { 0%,55%{opacity:0} 70%,100%{opacity:1} }
+
+  /* S4: broker 1 dies, broker 2 promoted */
+  .s4-die { animation: s4die 5s infinite; transform-origin: 110px 110px; }
+  .s4-burst { opacity: 0; animation: s1burst 5s infinite; transform-origin: 110px 112px; }
+  .s4-l2a { animation: s4hide 5s infinite; }
+  .s4-l2b { opacity: 0; animation: s4show 5s infinite; }
+  .s4-move { opacity: 0; animation: s3move 5s infinite; }
+  @keyframes s4die { 0%,25%{opacity:1} 33%{opacity:.12} 100%{opacity:.12} }
+  @keyframes s4hide { 0%,55%{opacity:1} 65%,100%{opacity:0} }
+  @keyframes s4show { 0%,60%{opacity:0} 72%,100%{opacity:1} }
+
+  /* S5: packet travels; ack vs no-ack */
+  .s5-packet { animation: s5pkt 4s infinite ease-in-out; }
+  .s5-ack { opacity: 0; animation: s5ack 4s infinite; }
+  .s5-noack { opacity: 0; animation: s5noack 4s infinite; }
+  @keyframes s5pkt { 0%{transform:translateX(0);opacity:1} 40%{transform:translateX(178px);opacity:1} 55%{transform:translateX(178px)} 100%{transform:translateX(178px);opacity:.4} }
+  @keyframes s5ack { 0%,45%{opacity:0} 55%,90%{opacity:1} 100%{opacity:0} }
+  @keyframes s5noack { 0%,60%{opacity:0} 72%,95%{opacity:1} 100%{opacity:0} }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scn [class*="s1-"],.scn [class*="s2-"],.scn [class*="s3-"],.scn [class*="s4-"],.scn [class*="s5-"],.scn .topic-node { animation: none !important; opacity: 1 !important; }
+  }
+
+  /* ---- slide: why disk is fast ---- */
+  .fast-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6vh 1.6vw; }
+  .fast-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.6vh 1.2vw; display: flex; flex-direction: column; gap: .8vh; }
+  .fast-card.ok { background: linear-gradient(160deg,#211c12,#161b22); border-color: #ff9f1c44; }
+  .fast-h { display: flex; align-items: center; gap: .5rem; font-size: clamp(.9rem, 1.25vw, 1.1rem); font-weight: 600; }
+  .fico { flex: none; font-size: 1.2rem; }
+  .fast-card p { color: var(--muted); font-size: clamp(.76rem, 1vw, .9rem); line-height: 1.45; }
+  .fast-card p b { color: var(--ink); font-weight: 600; }
+  .fast-foot { margin-top: 2vh; padding-top: 1.5vh; border-top: 1px solid var(--border); color: var(--muted); font-size: clamp(.8rem, 1.05vw, .95rem); line-height: 1.5; }
+  .fast-foot b { color: var(--kafka); }
+
+  /* ---- final slide: trade-offs ---- */  .to-table { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .to-row { display: grid; grid-template-columns: 1.1fr 1.6fr 1.9fr; border-bottom: 1px solid var(--border); }
+  .to-row:last-child { border-bottom: none; }
+  .to-row > div { padding: 1vh 1vw; font-size: clamp(.76rem, 1vw, .92rem); line-height: 1.4; color: var(--muted); border-right: 1px solid var(--border); }
+  .to-row > div:last-child { border-right: none; }
+  .to-row > div:first-child { color: var(--ink); font-weight: 600; }
+  .to-head > div { background: var(--panel-2); color: var(--ink) !important; font-weight: 700; font-size: clamp(.8rem, 1.05vw, .98rem); }
+  .to-head > div:nth-child(2) { color: var(--accent-4) !important; }
+  .to-head > div:nth-child(3) { color: var(--kafka) !important; }
+  .to-row .win { color: #7ee2a8; }
+  .to-row .win b, .to-row b { color: var(--ink); font-weight: 600; }
+  .to-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6vw; margin-top: 2vh; }
+  .to-pick { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.4vh 1.2vw; color: var(--muted); font-size: clamp(.78rem, 1vw, .92rem); line-height: 1.5; }
+  .pick-h { display: block; font-weight: 700; margin-bottom: .5vh; font-size: clamp(.85rem, 1.1vw, 1rem); }
+  .to-oneliner { margin-top: 2vh; padding-top: 1.6vh; border-top: 1px solid var(--border); color: var(--muted); font-size: clamp(.82rem, 1.1vw, 1rem); line-height: 1.55; }
+  .to-oneliner b { color: var(--ink); }
+
+  /* svg text */
+  svg text { font-family: inherit; fill: var(--ink); }
+  svg .lbl { font-size: 13px; }
+  svg .sub { font-size: 10px; fill: var(--muted); }
+
+  /* ---- chrome: progress + nav ---- */
+  .chrome {
+    position: fixed; bottom: 2.4vh; right: 3vw; left: 3vw;
+    display: flex; align-items: center; justify-content: space-between;
+    color: var(--muted); font-size: .85rem; pointer-events: none;
+  }
+  .nav { pointer-events: auto; display: flex; gap: .5rem; }
+  .nav button {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 8px; padding: .45rem .8rem; cursor: pointer; font-size: .85rem;
+  }
+  .nav button:hover { border-color: var(--accent); }
+  .dots { display: flex; gap: .4rem; }
+  .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); display: block; transition: background .2s; }
+  .dots i.on { background: var(--accent); }
+  .hint { position: fixed; bottom: 2.4vh; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: .78rem; opacity:.7;}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- ================= SLIDE 1: TITLE ================= -->
+  <section class="slide title-slide active">
+    <div class="title-badge">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="2.4" fill="#ff9f1c"/><circle cx="6" cy="15" r="2.4" fill="#ff9f1c"/><circle cx="18" cy="15" r="2.4" fill="#ff9f1c"/><path d="M12 7v3M12 12l-5 2M12 12l5 2" stroke="#ff9f1c" stroke-width="1.4"/></svg>
+      Distributed Systems · Deep Dive
+    </div>
+    <div class="kicker">Apache Kafka</div>
+    <h1>Kafka as a Cache<br/><span class="accent">A distributed key–value store,<br/>without Redis</span></h1>
+    <p class="subtitle">
+      How log compaction and Kafka Streams turn an event log into a fast, replicated,
+      fault-tolerant key–value cache — built and dissected end to end.
+    </p>
+    <div class="title-meta">
+      <div><b>Spring Boot + Kafka Streams</b>KTable · RocksDB · Compacted Topics</div>
+      <div><b>Built &amp; Verified</b>15 automated tests, incl. crash survival</div>
+    </div>
+  </section>
+
+  <!-- ================= SLIDE 2: POPULAR CACHING APPROACHES ================= -->
+  <section class="slide">
+    <div class="kicker">Landscape</div>
+    <h2>Popular ways to cache</h2>
+    <div class="cards">
+
+      <!-- In-app / in-memory -->
+      <div class="card">
+        <h3><span class="dot" style="background:var(--accent-2)"></span> In-App (In-Memory) Cache</h3>
+        <p>A map living inside the application process (e.g. Caffeine, Guava, a <code>HashMap</code>). Fastest possible reads — no network. But it dies with the process and each instance has its own copy (no sharing).</p>
+        <span class="tag">Fast · Local · Not shared · Volatile</span>
+        <div class="diagram">
+          <svg viewBox="0 0 320 90">
+            <rect x="14" y="18" width="120" height="54" rx="8" fill="#1f6feb22" stroke="#58a6ff"/>
+            <text class="lbl" x="74" y="40" text-anchor="middle">App instance</text>
+            <rect x="30" y="46" width="88" height="18" rx="4" fill="#0d1117" stroke="#3fb950"/>
+            <text class="sub" x="74" y="58" text-anchor="middle">in-memory map</text>
+            <path d="M62 46 v-6 M86 46 v-6" stroke="#3fb950" stroke-width="1"/>
+            <text class="sub" x="230" y="34" text-anchor="middle">read = same process</text>
+            <path d="M150 55 h150" stroke="#30363d" stroke-dasharray="3 3"/>
+            <text class="sub" x="230" y="70" text-anchor="middle">no network hop</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Distributed cache: Redis / Memcached -->
+      <div class="card">
+        <h3><span class="dot" style="background:var(--accent-4)"></span> Distributed Cache (Redis / Memcached)</h3>
+        <p>A dedicated cache server (or cluster) that all app instances share over the network. Consistent view, survives app restarts, scales independently — but it's extra infrastructure to run, secure and pay for.</p>
+        <span class="tag">Shared · Network hop · Extra infra</span>
+        <div class="diagram">
+          <svg viewBox="0 0 320 90">
+            <rect x="8" y="10" width="70" height="24" rx="6" fill="#1f6feb22" stroke="#58a6ff"/><text class="sub" x="43" y="26" text-anchor="middle">App A</text>
+            <rect x="8" y="56" width="70" height="24" rx="6" fill="#1f6feb22" stroke="#58a6ff"/><text class="sub" x="43" y="72" text-anchor="middle">App B</text>
+            <rect x="215" y="30" width="95" height="34" rx="8" fill="#db61a222" stroke="#db61a2"/>
+            <text class="lbl" x="262" y="51" text-anchor="middle">Redis</text>
+            <path d="M78 22 C150 22 150 45 213 45" stroke="#db61a2" fill="none"/>
+            <path d="M78 68 C150 68 150 47 213 47" stroke="#db61a2" fill="none"/>
+            <text class="sub" x="150" y="14" text-anchor="middle">network</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- CDN / edge cache -->
+      <div class="card">
+        <h3><span class="dot" style="background:var(--accent)"></span> CDN / Edge Cache</h3>
+        <p>Caches responses close to users at edge locations (CloudFront, Cloudflare). Great for static assets and read-heavy HTTP responses; keyed by URL, not arbitrary application state.</p>
+        <span class="tag">Geo-distributed · HTTP · Read-heavy</span>
+        <div class="diagram">
+          <svg viewBox="0 0 320 90">
+            <circle cx="40" cy="45" r="16" fill="#1f6feb22" stroke="#58a6ff"/><text class="sub" x="40" y="49" text-anchor="middle">user</text>
+            <rect x="120" y="30" width="70" height="30" rx="8" fill="#58a6ff22" stroke="#58a6ff"/><text class="sub" x="155" y="49" text-anchor="middle">edge PoP</text>
+            <rect x="245" y="30" width="66" height="30" rx="8" fill="#0d1117" stroke="#30363d"/><text class="sub" x="278" y="49" text-anchor="middle">origin</text>
+            <path d="M56 45 h60" stroke="#58a6ff" marker-end="url(#a)"/>
+            <path d="M190 45 h52" stroke="#30363d" stroke-dasharray="3 3"/>
+            <text class="sub" x="216" y="26" text-anchor="middle">miss only</text>
+            <defs><marker id="a" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#58a6ff"/></marker></defs>
+          </svg>
+        </div>
+      </div>
+
+      <!-- DB / query cache -->
+      <div class="card">
+        <h3><span class="dot" style="background:var(--accent-3)"></span> Database / Query-Result Cache</h3>
+        <p>Caching at or in front of the database — materialized views, query caches, or a read-through cache layer. Reduces load on the primary store; invalidation is the hard part.</p>
+        <span class="tag">Read-through · Reduces DB load · Invalidation is tricky</span>
+        <div class="diagram">
+          <svg viewBox="0 0 320 90">
+            <rect x="8" y="30" width="66" height="30" rx="8" fill="#1f6feb22" stroke="#58a6ff"/><text class="sub" x="41" y="49" text-anchor="middle">App</text>
+            <rect x="120" y="30" width="80" height="30" rx="8" fill="#f0883e22" stroke="#f0883e"/><text class="sub" x="160" y="49" text-anchor="middle">cache layer</text>
+            <path d="M74 45 h44" stroke="#f0883e" marker-end="url(#b)"/>
+            <path d="M200 45 h44" stroke="#30363d" stroke-dasharray="3 3" marker-end="url(#c)"/>
+            <path d="M244 38 a20 20 0 0 1 0 14" stroke="#30363d" fill="none"/>
+            <ellipse cx="278" cy="34" rx="26" ry="7" fill="#0d1117" stroke="#30363d"/>
+            <path d="M252 34 v22 a26 7 0 0 0 52 0 v-22" fill="none" stroke="#30363d"/>
+            <text class="sub" x="278" y="70" text-anchor="middle">DB</text>
+            <defs>
+              <marker id="b" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#f0883e"/></marker>
+              <marker id="c" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#30363d"/></marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= SLIDE 3: WHY REDIS ISN'T ALWAYS SUITABLE ================= -->
+  <section class="slide">
+    <div class="kicker">The Case Against Reaching for Redis</div>
+    <h2>Redis is great — but not free, and not always the right fit</h2>
+    <div class="redis-wrap">
+
+      <div class="redis-cols">
+        <div class="ov-card">
+          <div class="ov-ico" style="background:#db61a222;border-color:#db61a2">🏗️</div>
+          <h3>Operational overhead</h3>
+          <ul>
+            <li>Another system to <b>deploy, monitor, patch</b> and upgrade</li>
+            <li>HA needs <b>replicas + Sentinel / Cluster</b> — real ops burden</li>
+            <li>One more thing that can page you at 3am</li>
+          </ul>
+        </div>
+        <div class="ov-card">
+          <div class="ov-ico" style="background:#f0883e22;border-color:#f0883e">💸</div>
+          <h3>Cost &amp; footprint</h3>
+          <ul>
+            <li>Redis is <b>RAM-resident</b>, and memory is the most expensive storage tier</li>
+            <li>Managed Redis is billed <b>per node, per hour</b> — the meter never stops</li>
+            <li>Growing the dataset means scaling <b>the most expensive resource (RAM)</b></li>
+            <li>RAM is blazing fast — but <b>not every workload needs sub-millisecond reads</b>; you often pay for speed you don't use</li>
+          </ul>
+        </div>
+        <div class="ov-card">
+          <div class="ov-ico" style="background:#58a6ff22;border-color:#58a6ff">🔗</div>
+          <h3>Consistency &amp; coupling</h3>
+          <ul>
+            <li><b>Cache invalidation</b> — the classic hard problem; stale data &amp; dual-write bugs</li>
+            <li>Two sources of truth (DB + cache) to keep in sync</li>
+            <li>Durability is opt-in (RDB/AOF); a crash can <b>lose recent writes</b></li>
+            <li>Network hop + an extra failure mode between app and cache</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="redis-note">
+        <div class="note-diagram">
+          <svg viewBox="0 0 260 138">
+            <text class="sub" x="65" y="12" text-anchor="middle">Typical stack</text>
+            <rect x="20" y="18" width="90" height="19" rx="6" fill="#1f6feb22" stroke="#58a6ff"/><text class="sub" x="65" y="31" text-anchor="middle">App</text>
+            <rect x="20" y="42" width="90" height="19" rx="6" fill="#db61a222" stroke="#db61a2"/><text class="sub" x="65" y="55" text-anchor="middle">+ Redis</text>
+            <rect x="20" y="66" width="90" height="19" rx="6" fill="#ff9f1c22" stroke="#ff9f1c"/><text class="sub" x="65" y="79" text-anchor="middle">+ Kafka</text>
+            <rect x="20" y="90" width="90" height="19" rx="6" fill="#0d1117" stroke="#30363d"/><text class="sub" x="65" y="103" text-anchor="middle">+ DB</text>
+            <text class="sub" x="65" y="122" text-anchor="middle" style="fill:#db61a2">4 systems to run</text>
+            <path d="M118 63 h18" stroke="#3fb950" stroke-width="1.5" marker-end="url(#r)"/>
+            <defs><marker id="r" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#3fb950"/></marker></defs>
+            <text class="sub" x="200" y="12" text-anchor="middle">Reuse Kafka</text>
+            <rect x="155" y="18" width="90" height="19" rx="6" fill="#1f6feb22" stroke="#58a6ff"/><text class="sub" x="200" y="31" text-anchor="middle">App</text>
+            <rect x="155" y="42" width="90" height="43" rx="6" fill="#ff9f1c22" stroke="#ff9f1c"/><text class="sub" x="200" y="60" text-anchor="middle">Kafka</text><text class="sub" x="200" y="75" text-anchor="middle">log + cache</text>
+            <rect x="155" y="90" width="90" height="19" rx="6" fill="#0d1117" stroke="#30363d"/><text class="sub" x="200" y="103" text-anchor="middle">+ DB</text>
+            <text class="sub" x="200" y="122" text-anchor="middle" style="fill:#3fb950">3 systems to run</text>
+          </svg>
+        </div>
+        <p class="note-text">
+          <b>If you already run Kafka,</b> the cache rides on infrastructure you
+          already operate, secure and pay for — no new moving part, and the data is
+          <span class="accent">durable &amp; replicated by default.</span>
+        </p>
+      </div>
+
+    </div>
+    <p class="footnote">Redis still wins for sub-millisecond random reads, rich data structures (sorted sets, TTLs, pub/sub) and pure ephemeral caching. The point isn't “never Redis” — it's “not <i>automatically</i> Redis.”</p>
+  </section>
+
+  <!-- ================= SLIDE 4: KAFKA AS A CACHE ================= -->
+  <section class="slide">
+    <div class="kicker">The Idea</div>
+    <h2>Why Use Kafka as a Distributed Store?</h2>
+    <div class="feat-grid">
+
+      <div class="feat">
+        <div class="feat-h"><span class="fnum">1</span> No new infrastructure</div>
+        <p>Already using Kafka for event streaming? Then adding a cache means <b>zero new systems</b> to stand up. The store is just a library running inside your app — nothing extra to deploy, secure or pay for.</p>
+      </div>
+
+      <div class="feat">
+        <div class="feat-h"><span class="fnum">2</span> Survives node failures</div>
+        <p>Kafka <b>replicates every write</b> across brokers automatically. If a broker — or your whole app — crashes, <b>nothing is lost</b>: the cache is simply rebuilt from the log. Durability comes for free.</p>
+      </div>
+
+      <div class="feat">
+        <div class="feat-h"><span class="fnum">3</span> Scales horizontally</div>
+        <p>Need more capacity or throughput? <b>Add more partitions and more app instances.</b> Kafka Streams splits the keyspace across them automatically — each instance owns and serves its own slice.</p>
+      </div>
+
+      <div class="feat">
+        <div class="feat-h"><span class="fnum">4</span> History + latest value</div>
+        <p>A <b>compacted topic</b> keeps the latest value per key, while the log still records every change as it happened. You get a clean current-state view <b>and</b> the change history behind it.</p>
+      </div>
+
+    </div>
+    <div class="usecases">
+      <span class="uc-label">Works especially well for</span>
+      <span class="uc">⚙️ Configuration &amp; feature flags</span>
+      <span class="uc">🔑 Session storage</span>
+      <span class="uc">⚡ Caching frequently-accessed data</span>
+      <span class="uc">🌐 Distributed application state</span>
+    </div>
+
+    <div class="compact-explainer">
+      <div class="ce-text">
+        <span class="ce-title">What's a compacted topic?</span>
+        A normal topic deletes old messages after a time window. A <b>compacted</b> topic instead keeps
+        <b>only the latest message per key</b>, forever — so the log of changes collapses into a
+        current-state table.
+      </div>
+      <div class="ce-diagram">
+        <svg viewBox="0 0 460 96">
+          <!-- log side -->
+          <text class="sub" x="95" y="12" text-anchor="middle">The log (every write, in order)</text>
+          <rect x="8" y="20" width="174" height="16" rx="3" fill="#0d1117" stroke="#30363d"/><text class="sub" x="16" y="32">(user:123, "Alice")</text>
+          <rect x="8" y="40" width="174" height="16" rx="3" fill="#0d1117" stroke="#30363d"/><text class="sub" x="16" y="52">(user:999, "Carol")</text>
+          <rect x="8" y="60" width="174" height="16" rx="3" fill="#0d1117" stroke="#30363d"/><text class="sub" x="16" y="72">(user:123, "Bob")</text>
+          <!-- strike the superseded Alice -->
+          <line x1="14" y1="28" x2="176" y2="28" stroke="#f85149" stroke-width="1.4"/>
+          <text class="sub" x="95" y="90" text-anchor="middle" style="fill:#f85149">Alice superseded by Bob</text>
+
+          <!-- arrow -->
+          <path d="M196 48 h40" stroke="#3fb950" stroke-width="1.6" marker-end="url(#ce)"/>
+          <text class="sub" x="216" y="40" text-anchor="middle" style="fill:#3fb950">compact</text>
+          <defs><marker id="ce" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0l6 3-6 3z" fill="#3fb950"/></marker></defs>
+
+          <!-- table side -->
+          <text class="sub" x="360" y="12" text-anchor="middle">Kept (latest value per key)</text>
+          <rect x="258" y="30" width="194" height="16" rx="3" fill="#0d1117" stroke="#3fb950"/><text class="sub" x="266" y="42">user:123 → "Bob"</text>
+          <rect x="258" y="50" width="194" height="16" rx="3" fill="#0d1117" stroke="#3fb950"/><text class="sub" x="266" y="62">user:999 → "Carol"</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SLIDE 5: ARCHITECTURE / HOW IT WORKS ================= -->
+  <section class="slide">
+    <div class="kicker">How It Works</div>
+    <h2>The architecture: two paths, one source of truth</h2>
+
+    <div class="arch">
+      <svg viewBox="0 0 900 360" class="arch-svg">
+        <defs>
+          <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#58a6ff"/></marker>
+          <marker id="ag" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#3fb950"/></marker>
+          <marker id="ap" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#db61a2"/></marker>
+          <marker id="ap2" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#db61a2"/></marker>
+        </defs>
+
+        <!-- ===== APP (write) — window/monitor icon ===== -->
+        <g transform="translate(40,40)">
+          <rect x="0" y="0" width="150" height="88" rx="12" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+          <rect x="18" y="16" width="46" height="34" rx="4" fill="none" stroke="#58a6ff" stroke-width="1.6"/>
+          <line x1="18" y1="24" x2="64" y2="24" stroke="#58a6ff" stroke-width="1.6"/>
+          <circle cx="23" cy="20" r="1.4" fill="#58a6ff"/><circle cx="28" cy="20" r="1.4" fill="#58a6ff"/>
+          <text class="lbl" x="102" y="30" text-anchor="middle">Your App</text>
+          <text class="sub" x="102" y="46" text-anchor="middle">producer</text>
+          <text class="sub" x="75" y="72" text-anchor="middle">write side</text>
+        </g>
+
+        <!-- ===== COMPACTED TOPIC — stacked log segments ===== -->
+        <g transform="translate(345,26)">
+          <rect x="0" y="0" width="230" height="110" rx="12" fill="#ff9f1c14" stroke="#ff9f1c" stroke-width="1.5"/>
+          <!-- little log bars -->
+          <rect x="18" y="20" width="60" height="10" rx="2" fill="#ff9f1c" opacity=".85"/>
+          <rect x="18" y="34" width="44" height="10" rx="2" fill="#ff9f1c" opacity=".55"/>
+          <rect x="18" y="48" width="66" height="10" rx="2" fill="#ff9f1c" opacity=".85"/>
+          <rect x="18" y="62" width="38" height="10" rx="2" fill="#ff9f1c" opacity=".55"/>
+          <text class="lbl" x="150" y="34" text-anchor="middle" style="fill:#ff9f1c">Compacted</text>
+          <text class="lbl" x="150" y="52" text-anchor="middle" style="fill:#ff9f1c">Topic</text>
+          <text class="sub" x="115" y="88" text-anchor="middle" style="fill:#3fb950">◆ SOURCE OF TRUTH ◆</text>
+          <text class="sub" x="115" y="102" text-anchor="middle">durable · replicated · on broker disk</text>
+        </g>
+
+        <!-- ===== KAFKA STREAMS — gear icon ===== -->
+        <g transform="translate(345,186)">
+          <rect x="0" y="0" width="230" height="60" rx="12" fill="#3fb95018" stroke="#3fb950" stroke-width="1.5"/>
+          <g transform="translate(30,30)" stroke="#3fb950" stroke-width="1.6" fill="none">
+            <circle cx="0" cy="0" r="9"/>
+            <circle cx="0" cy="0" r="3.2" fill="#3fb950"/>
+            <path d="M0 -14 V-10 M0 10 V14 M-14 0 H-10 M10 0 H14 M-10 -10 l3 3 M10 10 l-3 -3 M-10 10 l3 -3 M10 -10 l-3 3"/>
+          </g>
+          <text class="lbl" x="130" y="27" text-anchor="middle">Kafka Streams</text>
+          <text class="sub" x="130" y="44" text-anchor="middle">consumes &amp; materializes</text>
+        </g>
+
+        <!-- ===== ROCKSDB — database cylinder icon ===== -->
+        <g transform="translate(345,278)">
+          <rect x="0" y="0" width="230" height="66" rx="12" fill="#db61a218" stroke="#db61a2" stroke-width="1.5"/>
+          <g transform="translate(20,14)" stroke="#db61a2" stroke-width="1.6" fill="#db61a220">
+            <ellipse cx="20" cy="6" rx="20" ry="6"/>
+            <path d="M0 6 V32 a20 6 0 0 0 40 0 V6"/>
+            <path d="M0 18 a20 6 0 0 0 40 0" fill="none"/>
+          </g>
+          <text class="lbl" x="140" y="30" text-anchor="middle">Local RocksDB</text>
+          <text class="sub" x="140" y="47" text-anchor="middle">indexed copy (KTable) · in your app</text>
+        </g>
+
+        <!-- ===== APP (read) — window/monitor icon ===== -->
+        <g transform="translate(710,244)">
+          <rect x="0" y="0" width="150" height="88" rx="12" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+          <rect x="18" y="16" width="46" height="34" rx="4" fill="none" stroke="#58a6ff" stroke-width="1.6"/>
+          <line x1="18" y1="24" x2="64" y2="24" stroke="#58a6ff" stroke-width="1.6"/>
+          <circle cx="23" cy="20" r="1.4" fill="#58a6ff"/><circle cx="28" cy="20" r="1.4" fill="#58a6ff"/>
+          <text class="lbl" x="102" y="30" text-anchor="middle">Your App</text>
+          <text class="sub" x="102" y="46" text-anchor="middle">reader</text>
+          <text class="sub" x="75" y="72" text-anchor="middle">read side</text>
+        </g>
+
+        <!-- ===== arrows ===== -->
+        <!-- write: app -> topic -->
+        <path d="M190 84 H338" stroke="#58a6ff" stroke-width="2" marker-end="url(#ar)"/>
+        <text class="sub" x="264" y="74" text-anchor="middle" style="fill:#58a6ff">send(key, value)</text>
+        <!-- topic -> streams -->
+        <path d="M460 136 V180" stroke="#3fb950" stroke-width="2" marker-end="url(#ag)"/>
+        <text class="sub" x="540" y="162" text-anchor="middle" style="fill:#3fb950">consumes</text>
+        <!-- streams -> rocksdb -->
+        <path d="M460 246 V272" stroke="#db61a2" stroke-width="2" marker-end="url(#ap)"/>
+        <!-- rocksdb -> read app -->
+        <path d="M575 311 H704" stroke="#db61a2" stroke-width="2" marker-end="url(#ap2)"/>
+        <text class="sub" x="640" y="302" text-anchor="middle" style="fill:#db61a2">local get(key) — no network</text>
+      </svg>
+    </div>
+
+    <div class="arch-cols">
+      <div class="arch-card write">
+        <h3>✏️ Write path</h3>
+        <p><code>put(key, value)</code> produces a record to the compacted topic. The app <b>never writes RocksDB directly</b> — the write goes to Kafka first, so it's durable and replicated before it's acknowledged.</p>
+      </div>
+      <div class="arch-card read">
+        <h3>⚡ Read path</h3>
+        <p><code>get(key)</code> reads the <b>local RocksDB</b> that Kafka Streams keeps in sync — an in-process lookup with <b>no network hop</b>. This is the fast, cache-like part.</p>
+      </div>
+      <div class="arch-card note">
+        <h3>⏳ The one gotcha</h3>
+        <p>A write travels <b>producer → topic → Streams → RocksDB</b>, so it isn't instantly readable. That millisecond gap is the <b>eventual-consistency</b> window.</p>
+      </div>
+    </div>
+
+    <p class="speaker-note">
+      <b>Notes:</b> <b>Kafka Streams</b> is a library running inside your app (not a server) — it consumes the compacted topic and applies each record as an upsert (<code>key,null</code> = delete), and auto-shares partitions across instances via the <code>application-id</code>.
+      <b>RocksDB</b> is an embedded KV store shipped with Kafka Streams (not part of the broker), living on each instance's own disk; it's a disposable local copy — the topic is the source of truth, so wiping RocksDB and restarting rebuilds it by replaying the topic.
+    </p>
+  </section>
+
+  <!-- ================= SLIDE 6: CRASH SCENARIOS ================= -->
+  <section class="slide">
+    <div class="kicker">Resilience</div>
+    <h2>What happens when things crash?</h2>
+    <p class="lead2">Because the <span class="accent">compacted topic is the source of truth</span> and RocksDB is only a disposable local copy, every failure recovers with <b>no data loss</b>. The next slides walk through each scenario.</p>
+
+    <!-- animated hero: crash -> topic survives -> rebuild -->
+    <div class="crash-hero">
+      <svg viewBox="0 0 900 150" class="hero-svg">
+        <defs><marker id="rb" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#3fb950"/></marker></defs>
+        <g class="app-node">
+          <rect x="30" y="45" width="150" height="70" rx="12" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+          <rect x="52" y="62" width="42" height="30" rx="4" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+          <text class="lbl" x="132" y="76" text-anchor="middle">App</text>
+          <text class="sub" x="105" y="104" text-anchor="middle">+ RocksDB</text>
+        </g>
+        <g class="burst"><text x="105" y="86" text-anchor="middle" font-size="34">💥</text></g>
+        <g class="topic-node">
+          <rect x="375" y="35" width="180" height="90" rx="12" fill="#ff9f1c14" stroke="#ff9f1c" stroke-width="1.6"/>
+          <rect x="395" y="55" width="55" height="9" rx="2" fill="#ff9f1c" opacity=".85"/>
+          <rect x="395" y="68" width="40" height="9" rx="2" fill="#ff9f1c" opacity=".5"/>
+          <rect x="395" y="81" width="60" height="9" rx="2" fill="#ff9f1c" opacity=".85"/>
+          <text class="lbl" x="495" y="70" text-anchor="middle" style="fill:#ff9f1c">Topic</text>
+          <text class="sub" x="465" y="112" text-anchor="middle" style="fill:#3fb950">survives ✓</text>
+        </g>
+        <g class="app2-node">
+          <rect x="720" y="45" width="150" height="70" rx="12" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+          <rect x="742" y="62" width="42" height="30" rx="4" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+          <text class="lbl" x="822" y="76" text-anchor="middle">App</text>
+          <text class="sub" x="795" y="104" text-anchor="middle">rebuilt</text>
+        </g>
+        <path class="rebuild-arrow" d="M555 80 H716" stroke="#3fb950" stroke-width="2.5" fill="none" marker-end="url(#rb)"/>
+        <text class="sub" x="636" y="70" text-anchor="middle" style="fill:#3fb950">replay &amp; rebuild</text>
+      </svg>
+      <div class="hero-cap">💥 crash &nbsp;→&nbsp; 🗑️ local copy gone &nbsp;→&nbsp; 🟠 topic intact &nbsp;→&nbsp; ♻️ rebuilt from the log</div>
+    </div>
+
+    <div class="scenario-list">
+      <span>💥 App / pod crashes</span>
+      <span>🗑️ RocksDB wiped</span>
+      <span>🔀 One of many pods dies</span>
+      <span>🖥️ A Kafka broker dies</span>
+      <span>⚡ Crash mid-write</span>
+    </div>
+  </section>
+
+  <!-- ===== SCENARIO 1: APP / POD CRASHES ===== -->
+  <section class="slide scn">
+    <div class="kicker">Crash Scenario 1 / 5</div>
+    <h2><span class="scn-ico">💥</span> App / pod crashes</h2>
+    <div class="scn-body">
+      <div class="scn-anim">
+        <svg viewBox="0 0 460 220" class="scn-svg">
+          <defs><marker id="s1a" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#3fb950"/></marker></defs>
+          <!-- topic always alive -->
+          <g class="topic-node">
+            <rect x="150" y="14" width="160" height="72" rx="12" fill="#ff9f1c14" stroke="#ff9f1c" stroke-width="1.6"/>
+            <rect x="168" y="30" width="50" height="8" rx="2" fill="#ff9f1c" opacity=".85"/>
+            <rect x="168" y="42" width="36" height="8" rx="2" fill="#ff9f1c" opacity=".5"/>
+            <rect x="168" y="54" width="54" height="8" rx="2" fill="#ff9f1c" opacity=".85"/>
+            <text class="lbl" x="262" y="48" text-anchor="middle" style="fill:#ff9f1c">Topic ✓</text>
+          </g>
+          <!-- app crashes then returns -->
+          <g class="s1-app">
+            <rect x="150" y="130" width="160" height="70" rx="12" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+            <rect x="172" y="148" width="40" height="30" rx="4" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+            <text class="lbl" x="255" y="162" text-anchor="middle">App + RocksDB</text>
+          </g>
+          <g class="s1-burst"><text x="230" y="176" text-anchor="middle" font-size="30">💥</text></g>
+          <!-- rebuild arrow topic -> app -->
+          <path class="s1-arrow" d="M230 88 V128" stroke="#3fb950" stroke-width="2.5" marker-end="url(#s1a)"/>
+          <text class="sub s1-arrow-lbl" x="300" y="112" text-anchor="middle" style="fill:#3fb950">replay → rebuild</text>
+        </svg>
+      </div>
+      <div class="scn-text">
+        <p class="what"><b>What's lost:</b> the pod's in-memory state and — if its disk is ephemeral — its RocksDB files.</p>
+        <p class="rec"><b>Recovery:</b> restart the pod. Kafka Streams re-joins, <b>replays the topic</b> from the last checkpoint, and rebuilds RocksDB. Data returns intact.</p>
+        <span class="verified">✓ verified in our test suite: hard <code>kill -9</code> + restart → all keys recovered</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SCENARIO 2: ROCKSDB WIPED ===== -->
+  <section class="slide scn">
+    <div class="kicker">Crash Scenario 2 / 5</div>
+    <h2><span class="scn-ico">🗑️</span> RocksDB wiped / lost</h2>
+    <div class="scn-body">
+      <div class="scn-anim">
+        <svg viewBox="0 0 460 220" class="scn-svg">
+          <defs><marker id="s2a" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#3fb950"/></marker></defs>
+          <g class="topic-node">
+            <rect x="150" y="14" width="160" height="72" rx="12" fill="#ff9f1c14" stroke="#ff9f1c" stroke-width="1.6"/>
+            <rect x="168" y="30" width="50" height="8" rx="2" fill="#ff9f1c" opacity=".85"/>
+            <rect x="168" y="42" width="36" height="8" rx="2" fill="#ff9f1c" opacity=".5"/>
+            <rect x="168" y="54" width="54" height="8" rx="2" fill="#ff9f1c" opacity=".85"/>
+            <text class="lbl" x="262" y="48" text-anchor="middle" style="fill:#ff9f1c">Topic ✓</text>
+          </g>
+          <!-- db cylinder: emptied then refilled -->
+          <g transform="translate(190,128)">
+            <g class="s2-db" stroke="#db61a2" stroke-width="1.6" fill="#db61a220">
+              <ellipse cx="40" cy="8" rx="40" ry="10"/>
+              <path d="M0 8 V56 a40 10 0 0 0 80 0 V8"/>
+              <path d="M0 26 a40 10 0 0 0 80 0" fill="none"/>
+              <path d="M0 42 a40 10 0 0 0 80 0" fill="none"/>
+            </g>
+            <text class="lbl" x="40" y="86" text-anchor="middle">RocksDB</text>
+            <text class="sub s2-wipe" x="40" y="34" text-anchor="middle" style="fill:#f85149">wiped</text>
+          </g>
+          <path class="s2-arrow" d="M230 88 V120" stroke="#3fb950" stroke-width="2.5" marker-end="url(#s2a)"/>
+          <text class="sub s2-arrow-lbl" x="308" y="108" text-anchor="middle" style="fill:#3fb950">rebuild from log</text>
+        </svg>
+      </div>
+      <div class="scn-text">
+        <p class="what"><b>What's lost:</b> only the local indexed copy — e.g. the disk was cleared or the node reprovisioned.</p>
+        <p class="rec"><b>Recovery:</b> on next start the store is <b>rebuilt entirely from the topic</b>. The truth was never in RocksDB — it's just a cache.</p>
+        <span class="verified">✓ verified: deleted the whole state dir + restart → data fully rebuilt</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SCENARIO 3: ONE OF MANY PODS DIES ===== -->
+  <section class="slide scn">
+    <div class="kicker">Crash Scenario 3 / 5</div>
+    <h2><span class="scn-ico">🔀</span> One of many pods dies</h2>
+    <div class="scn-body">
+      <div class="scn-anim">
+        <svg viewBox="0 0 460 220" class="scn-svg">
+          <!-- 3 pods, one dies, its partitions move -->
+          <g class="pod pod-a">
+            <rect x="20" y="80" width="120" height="60" rx="10" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+            <text class="lbl" x="80" y="104" text-anchor="middle">Pod A</text>
+            <text class="sub" x="80" y="122" text-anchor="middle">P0 · P1</text>
+          </g>
+          <g class="pod pod-b s3-die">
+            <rect x="170" y="80" width="120" height="60" rx="10" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+            <text class="lbl" x="230" y="104" text-anchor="middle">Pod B</text>
+            <text class="sub" x="230" y="122" text-anchor="middle">P2 · P3</text>
+          </g>
+          <g class="s3-burst"><text x="230" y="118" text-anchor="middle" font-size="28">💥</text></g>
+          <g class="pod pod-c">
+            <rect x="320" y="80" width="120" height="60" rx="10" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+            <text class="lbl" x="380" y="104" text-anchor="middle">Pod C</text>
+            <text class="sub s3-cnew" x="380" y="122" text-anchor="middle">P4 · P5 → +P2 P3</text>
+          </g>
+          <!-- reassign arrows appear -->
+          <path class="s3-move" d="M250 142 C260 180 340 180 372 142" stroke="#3fb950" stroke-width="2" fill="none"/>
+          <text class="sub s3-move" x="300" y="196" text-anchor="middle" style="fill:#3fb950">rebalance: reassign &amp; rebuild slice</text>
+        </svg>
+      </div>
+      <div class="scn-text">
+        <p class="what"><b>What's lost:</b> the partitions that pod owned become temporarily unserved.</p>
+        <p class="rec"><b>Recovery:</b> a consumer-group <b>rebalance</b> reassigns those partitions to surviving pods, which rebuild that slice from the log.</p>
+        <span class="verified">optional <b>standby replicas</b> keep warm copies → near-instant failover</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SCENARIO 4: A KAFKA BROKER DIES ===== -->
+  <section class="slide scn">
+    <div class="kicker">Crash Scenario 4 / 5</div>
+    <h2><span class="scn-ico">🖥️</span> A Kafka broker dies</h2>
+    <div class="scn-body">
+      <div class="scn-anim">
+        <svg viewBox="0 0 460 220" class="scn-svg">
+          <!-- broker 1 leader dies, broker 2 replica promoted -->
+          <g class="brk brk1 s4-die">
+            <rect x="40" y="70" width="140" height="80" rx="10" fill="#ff9f1c14" stroke="#ff9f1c" stroke-width="1.5"/>
+            <text class="lbl" x="110" y="98" text-anchor="middle" style="fill:#ff9f1c">Broker 1</text>
+            <text class="sub s4-l1" x="110" y="118" text-anchor="middle" style="fill:#3fb950">LEADER</text>
+          </g>
+          <g class="s4-burst"><text x="110" y="118" text-anchor="middle" font-size="30">💥</text></g>
+          <g class="brk brk2">
+            <rect x="280" y="70" width="140" height="80" rx="10" fill="#ff9f1c14" stroke="#ff9f1c" stroke-width="1.5"/>
+            <text class="lbl" x="350" y="98" text-anchor="middle" style="fill:#ff9f1c">Broker 2</text>
+            <text class="sub s4-l2a" x="350" y="118" text-anchor="middle">replica</text>
+            <text class="sub s4-l2b" x="350" y="118" text-anchor="middle" style="fill:#3fb950">→ new LEADER</text>
+          </g>
+          <path class="s4-move" d="M182 110 H278" stroke="#3fb950" stroke-width="2" stroke-dasharray="6 5" fill="none"/>
+          <text class="sub s4-move" x="230" y="100" text-anchor="middle" style="fill:#3fb950">promote</text>
+        </svg>
+      </div>
+      <div class="scn-text">
+        <p class="what"><b>What's lost:</b> nothing served by that broker — provided replication factor &gt; 1.</p>
+        <p class="rec"><b>Recovery:</b> a <b>replica on another broker</b> is automatically promoted to leader. The topic — the source of truth — stays available.</p>
+        <span class="verified">requires replication factor ≥ 2 (our local demo ran a single broker, RF 1)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SCENARIO 5: CRASH MID-WRITE ===== -->
+  <section class="slide scn">
+    <div class="kicker">Crash Scenario 5 / 5</div>
+    <h2><span class="scn-ico">⚡</span> Crash mid-write</h2>
+    <div class="scn-body">
+      <div class="scn-anim">
+        <svg viewBox="0 0 460 220" class="scn-svg">
+          <defs><marker id="s5a" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#58a6ff"/></marker>
+            <marker id="s5b" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#3fb950"/></marker></defs>
+          <g>
+            <rect x="20" y="80" width="120" height="60" rx="10" fill="#1f6feb18" stroke="#58a6ff" stroke-width="1.5"/>
+            <text class="lbl" x="80" y="106" text-anchor="middle">App</text>
+            <text class="sub" x="80" y="124" text-anchor="middle">send()</text>
+          </g>
+          <g>
+            <rect x="320" y="80" width="120" height="60" rx="10" fill="#ff9f1c14" stroke="#ff9f1c" stroke-width="1.5"/>
+            <text class="lbl" x="380" y="106" text-anchor="middle" style="fill:#ff9f1c">Broker</text>
+          </g>
+          <!-- data packet travels, then ack returns -->
+          <path d="M140 100 H318" stroke="#30363d" stroke-width="1.4" stroke-dasharray="3 3"/>
+          <circle class="s5-packet" cx="140" cy="100" r="7" fill="#58a6ff"/>
+          <text class="sub s5-ack" x="230" y="90" text-anchor="middle" style="fill:#3fb950">acks=all ✓ replicated</text>
+          <text class="sub s5-noack" x="230" y="160" text-anchor="middle" style="fill:#f85149">no ack → send() fails, retried — no silent partial write</text>
+        </svg>
+      </div>
+      <div class="scn-text">
+        <p class="what"><b>What's lost:</b> an unacknowledged write may or may not have landed on the broker.</p>
+        <p class="rec"><b>Recovery:</b> with <code>acks=all</code> a write is only “done” once replicated. A failed <code>send()</code> is retried or surfaced as an error — <b>never a silent partial state</b>.</p>
+        <span class="verified">synchronous <code>send().get()</code> + broker acknowledgement</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SLIDE: WHY IS DISK-BASED FAST? ================= -->
+  <section class="slide">
+    <div class="kicker">The Obvious Objection</div>
+    <h2>“If it's on disk, how is it fast?”</h2>
+    <p class="lead2">Disk-based doesn't mean disk-speed. Both Kafka and RocksDB are engineered so that <span class="accent">the hot path barely touches the disk</span> — and reads never touch the network.</p>
+
+    <div class="fast-grid">
+
+      <div class="fast-card">
+        <div class="fast-h"><span class="fico">➡️</span> Sequential, not random</div>
+        <p>Kafka only ever <b>appends</b> to the end of a log file. Sequential disk I/O is <b>orders of magnitude faster</b> than random seeks — no in-place updates, no B-tree churn.</p>
+      </div>
+
+      <div class="fast-card">
+        <div class="fast-h"><span class="fico">🧠</span> OS page cache = free RAM</div>
+        <p>Recently-written/read data stays in the OS <b>page cache</b> (RAM). Hot reads are served from memory <b>without Kafka managing any cache itself</b> — the OS does it.</p>
+      </div>
+
+      <div class="fast-card">
+        <div class="fast-h"><span class="fico">💾</span> RocksDB keeps hot data in memory</div>
+        <p>Our reads hit RocksDB, which has an <b>in-memory block cache + memtable</b>. Hot keys are answered at <b>memory speed</b>; only cold keys touch local SSD.</p>
+      </div>
+
+      <div class="fast-card">
+        <div class="fast-h"><span class="fico">🔌</span> No network hop on reads</div>
+        <p><code>get(key)</code> is an <b>in-process</b> lookup in local RocksDB. Redis always pays a network round-trip; here the data is <b>already on the box</b>.</p>
+      </div>
+
+      <div class="fast-card">
+        <div class="fast-h"><span class="fico">📤</span> Zero-copy transfer</div>
+        <p>Kafka streams bytes straight from the page cache to the socket via <code>sendfile()</code> — <b>skipping copies</b> through the application. Very little CPU per byte.</p>
+      </div>
+
+      <div class="fast-card ok">
+        <div class="fast-h"><span class="fico">⚖️</span> The honest bit</div>
+        <p>A <b>cold</b> key not in any cache does hit disk — slower than Redis's always-RAM guarantee, but it's <b>local SSD, not the network</b>. And it still <b>crushes a database query</b>.</p>
+      </div>
+
+    </div>
+
+    <p class="fast-foot"><b>Rule of thumb:</b> hot data ≈ memory speed (page cache + RocksDB cache) · cold data = one local disk read · <b>reads never cross the network</b>.</p>
+  </section>
+
+  <section class="slide">
+    <div class="kicker">The Honest Verdict</div>
+    <h2>Trade-offs: Redis vs Kafka-as-cache</h2>
+
+    <div class="to-table">
+      <div class="to-row to-head">
+        <div>Dimension</div>
+        <div>Redis</div>
+        <div>Kafka-as-cache</div>
+      </div>
+      <div class="to-row">
+        <div>Read latency</div>
+        <div class="win">Sub-ms, uniform (all RAM)</div>
+        <div>Hot keys ≈ Redis (local, <b>no network hop</b>); cold keys hit local disk</div>
+      </div>
+      <div class="to-row">
+        <div>Write visibility</div>
+        <div class="win">Instant</div>
+        <div>Eventually consistent (produce → topic → Streams → RocksDB)</div>
+      </div>
+      <div class="to-row">
+        <div>Random-read throughput</div>
+        <div class="win">Purpose-built, millions/sec</div>
+        <div>Good, not extreme</div>
+      </div>
+      <div class="to-row">
+        <div>Durability &amp; replication</div>
+        <div>Opt-in (RDB/AOF); can lose recent writes</div>
+        <div class="win">Built in — replicated log is the source of truth</div>
+      </div>
+      <div class="to-row">
+        <div>Rich operations</div>
+        <div class="win">incr, sorted sets, TTL, pub/sub, Lua</div>
+        <div>get / put / delete only</div>
+      </div>
+      <div class="to-row">
+        <div>Infrastructure</div>
+        <div>A separate cluster to run &amp; pay for</div>
+        <div class="win">None new — a library, if you already run Kafka</div>
+      </div>
+      <div class="to-row">
+        <div>Crash resilience</div>
+        <div>Restore from snapshot</div>
+        <div class="win">Wipe RocksDB → rebuilds from the topic (verified)</div>
+      </div>
+    </div>
+
+    <div class="to-summary">
+      <div class="to-pick">
+        <span class="pick-h" style="color:var(--accent-4)">Reach for Redis when…</span>
+        pure ephemeral caching, sub-ms &amp; uniform latency, high random-read rates, or you need rich data structures.
+      </div>
+      <div class="to-pick">
+        <span class="pick-h" style="color:var(--kafka)">Reach for Kafka-as-cache when…</span>
+        you already run Kafka, want durability &amp; replication for free, and can tolerate a small eventual-consistency window.
+      </div>
+    </div>
+
+    <p class="to-oneliner">
+      Redis is faster and more consistent for pure caching. <b>Kafka-as-cache</b> trades a little write latency and read-throughput for
+      <span class="accent">durability, replication, and zero new infrastructure</span> — with the bonus that reads are local, with no network hop.
+      The point was never “never Redis” — it's <b>“not automatically Redis.”</b>
+    </p>
+  </section>
+
+</div>
+
+<!-- chrome -->
+<div class="chrome">
+  <div class="dots" id="dots"></div>
+  <div class="nav">
+    <button onclick="go(-1)">‹ Prev</button>
+    <button onclick="go(1)">Next ›</button>
+  </div>
+</div>
+<div class="hint">Use ← / → arrow keys to navigate</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsWrap = document.getElementById('dots');
+  let i = 0;
+  slides.forEach((_, k) => { const d = document.createElement('i'); dotsWrap.appendChild(d); });
+  const dots = Array.from(dotsWrap.children);
+  function render() {
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    dots.forEach((d, k) => d.classList.toggle('on', k === i));
+  }
+  function go(dir) { i = Math.min(slides.length - 1, Math.max(0, i + dir)); render(); }
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') go(1);
+    if (e.key === 'ArrowLeft') go(-1);
+  });
+  render();
+</script>
+</body>
+</html>
